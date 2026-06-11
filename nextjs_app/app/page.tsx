@@ -371,12 +371,12 @@ export default function Home() {
           <div className="upload-mark" aria-hidden="true">UP</div>
           <h2>{uploading ? "Uploading files" : "Upload documents"}</h2>
           <p>Drag and drop files here or click to browse.</p>
-          <span>PDF, DOCX, DOC, TXT, MD</span>
+          <span>PDF, DOCX, TXT, MD</span>
           <input
             ref={fileInputRef}
             type="file"
             multiple
-            accept=".pdf,.docx,.doc,.txt,.md"
+            accept=".pdf,.docx,.txt,.md"
             onChange={event => handleFiles(event.target.files)}
           />
         </section>
