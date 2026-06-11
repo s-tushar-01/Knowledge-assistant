@@ -5,11 +5,9 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.config import get_settings
 from backend.db import crud
 from backend.db.database import AsyncSessionLocal, get_db
 from backend.ingestion.parser import SUPPORTED_EXTENSIONS
-from backend.ingestion.pipeline import DOCSTORE_DIR, DOCSTORE_PATH
 from backend.ingestion.pipeline import ingest_file
 
 logger = logging.getLogger(__name__)
@@ -72,6 +70,23 @@ async def upload_document(
     # Dedup check
     existing = await crud.get_document_by_hash(db, sha256)
     if existing:
+        if existing.status == "failed" or (existing.chunk_count or 0) == 0:
+            await crud.update_document_status(db, existing.id, "pending", error_message="")
+            existing_path = existing.file_path
+            if not existing_path or not Path(existing_path).exists():
+                dest = UPLOAD_DIR / f"{existing.id}{ext}"
+                dest.write_bytes(content)
+                existing.file_path = str(dest)
+                await db.commit()
+                existing_path = str(dest)
+            background_tasks.add_task(_run_ingestion, existing_path, existing.id)
+            return {
+                "document_id": existing.id,
+                "filename": existing.filename,
+                "status": "pending",
+                "message": "Existing document queued for free re-indexing",
+                "duplicate": True,
+            }
         return {
             "document_id": existing.id,
             "filename": existing.filename,
@@ -140,48 +155,13 @@ async def get_status(document_id: str, db: AsyncSession = Depends(get_db)):
     }
 
 
-def _remove_from_docstore(document_id: str) -> int:
-    """Remove this document's nodes from the persisted BM25 docstore."""
-    docstore_dir = Path(DOCSTORE_DIR)
-    if not docstore_dir.exists():
-        return 0
-
-    from llama_index.core.storage.docstore import SimpleDocumentStore
-
-    docstore = SimpleDocumentStore.from_persist_dir(DOCSTORE_DIR)
-    node_ids = [
-        node_id
-        for node_id, node in docstore.docs.items()
-        if node.metadata.get("document_id") == document_id
-    ]
-    for node_id in node_ids:
-        docstore.delete_document(node_id, raise_error=False)
-
-    docstore.persist(persist_path=DOCSTORE_PATH)
-    return len(node_ids)
-
-
-@router.delete("/{document_id}", summary="Delete document and its vectors")
+@router.delete("/{document_id}", summary="Delete document and its chunks")
 async def delete_document(document_id: str, db: AsyncSession = Depends(get_db)):
     doc = await crud.get_document(db, document_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    # Remove chunks from Chroma
-    try:
-        from backend.retrieval.vector_store import get_chroma_client
-        settings = get_settings()
-        col = get_chroma_client().get_or_create_collection(settings.chroma_collection_name)
-        col.delete(where={"document_id": document_id})
-    except Exception as exc:
-        logger.warning(f"Could not remove vectors for {document_id}: {exc}")
-
-    # Remove chunks from the BM25 docstore
-    try:
-        removed = _remove_from_docstore(document_id)
-        logger.info("Removed %d BM25 docstore nodes for %s", removed, document_id)
-    except Exception as exc:
-        logger.warning(f"Could not remove BM25 docstore nodes for {document_id}: {exc}")
+    await crud.delete_document_chunks(db, document_id)
 
     # Remove uploaded file
     if doc.file_path:
@@ -196,8 +176,6 @@ async def delete_document(document_id: str, db: AsyncSession = Depends(get_db)):
 def _friendly_ingestion_error(exc: Exception) -> str:
     message = str(exc)
     lower = message.lower()
-    if "insufficient_quota" in lower or "exceeded your current quota" in lower or "429" in lower:
-        return "OpenAI embedding quota is exhausted. Add billing/credits to the OpenAI key or use another embedding provider."
     if "api_key" in lower or "authentication" in lower or "401" in lower:
-        return "OpenAI API key is missing or invalid. Check OPENAI_API_KEY in Render environment variables."
+        return "Could not read this document because a parser dependency or key is missing."
     return message[:300] if len(message) > 300 else message

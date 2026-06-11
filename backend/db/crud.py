@@ -1,10 +1,10 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.db.models import Document
+from backend.db.models import Document, DocumentChunk
 
 
 async def create_document(db: AsyncSession, **kwargs) -> Document:
@@ -45,6 +45,8 @@ async def update_document_status(
         doc.chunk_count = chunk_count
     if error_message is not None:
         doc.error_message = error_message
+    elif status in {"pending", "processing", "done"}:
+        doc.error_message = None
     if status == "done":
         doc.ingested_at = datetime.utcnow()
     await db.commit()
@@ -59,3 +61,30 @@ async def delete_document(db: AsyncSession, document_id: str) -> bool:
     await db.delete(doc)
     await db.commit()
     return True
+
+
+async def replace_document_chunks(
+    db: AsyncSession,
+    document_id: str,
+    chunks: list[dict],
+) -> int:
+    await db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == document_id))
+    for chunk in chunks:
+        db.add(DocumentChunk(document_id=document_id, **chunk))
+    await db.commit()
+    return len(chunks)
+
+
+async def delete_document_chunks(db: AsyncSession, document_id: str) -> None:
+    await db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == document_id))
+    await db.commit()
+
+
+async def list_ready_chunks(db: AsyncSession) -> list[DocumentChunk]:
+    result = await db.execute(
+        select(DocumentChunk)
+        .join(Document, Document.id == DocumentChunk.document_id)
+        .where(Document.status == "done")
+        .order_by(DocumentChunk.created_at.desc(), DocumentChunk.chunk_index.asc())
+    )
+    return list(result.scalars().all())

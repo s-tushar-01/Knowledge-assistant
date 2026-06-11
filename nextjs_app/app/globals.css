@@ -309,6 +309,84 @@ button {
   border-color: var(--line-dark);
 }
 
+.library-panel .mini-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.ai-settings {
+  border: 1px solid var(--line-dark);
+  border-radius: 8px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.mode-pill {
+  border: 1px solid rgba(242, 183, 91, 0.4);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--amber);
+  background: rgba(242, 183, 91, 0.1);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.mode-pill.enabled {
+  border-color: rgba(34, 200, 184, 0.5);
+  color: var(--teal);
+  background: rgba(34, 200, 184, 0.1);
+}
+
+.provider-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.provider-toggle button,
+.api-key-input {
+  border: 1px solid var(--line-dark);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #edf7f4;
+}
+
+.provider-toggle button {
+  padding: 8px 10px;
+  font-size: 0.78rem;
+}
+
+.provider-toggle button.active {
+  border-color: rgba(34, 200, 184, 0.58);
+  background: rgba(34, 200, 184, 0.14);
+  color: var(--mint);
+}
+
+.api-key-input {
+  width: 100%;
+  min-width: 0;
+  outline: none;
+  padding: 10px 11px;
+  font-size: 0.8rem;
+}
+
+.api-key-input::placeholder {
+  color: rgba(237, 247, 244, 0.45);
+}
+
+.ai-actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.library-panel .mini-btn.ghost {
+  color: var(--muted-dark);
+}
+
 .search-box {
   height: 42px;
   border: 1px solid var(--line-dark);

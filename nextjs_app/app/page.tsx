@@ -38,6 +38,8 @@ interface Toast {
   message: string;
 }
 
+type AiProvider = "anthropic" | "openai";
+
 interface GraphNode {
   id: string;
   label: string;
@@ -104,6 +106,9 @@ export default function Home() {
   const [dragOver, setDragOver] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [expandedCitations, setExpandedCitations] = useState<Record<string, boolean>>({});
+  const [aiProvider, setAiProvider] = useState<AiProvider>("anthropic");
+  const [apiKeyDraft, setApiKeyDraft] = useState("");
+  const [sessionApiKey, setSessionApiKey] = useState("");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -137,6 +142,7 @@ export default function Home() {
   const readyCount = docs.filter(d => d.status === "done").length;
   const processingCount = docs.filter(d => d.status === "processing" || d.status === "pending").length;
   const totalBytes = docs.reduce((sum, doc) => sum + (doc.file_size_bytes ?? 0), 0);
+  const aiEnabled = Boolean(sessionApiKey.trim());
 
   const lastCitations = useMemo(() => {
     return [...messages].reverse().find(m => m.role === "assistant" && m.citations?.length)?.citations ?? [];
@@ -235,6 +241,23 @@ export default function Home() {
     void loadDocs();
   };
 
+  const saveAiKey = () => {
+    const key = apiKeyDraft.trim();
+    if (!key) {
+      toast("error", "Paste an API key first.");
+      return;
+    }
+    setSessionApiKey(key);
+    setApiKeyDraft("");
+    toast("success", "AI enabled for this session.");
+  };
+
+  const clearAiKey = () => {
+    setSessionApiKey("");
+    setApiKeyDraft("");
+    toast("success", "Back to free mode.");
+  };
+
   const sendMessage = async (query: string) => {
     if (!query.trim() || sending) return;
     if (readyCount === 0) {
@@ -250,9 +273,15 @@ export default function Home() {
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (sessionApiKey.trim()) {
+        headers["X-AI-Provider"] = aiProvider;
+        headers["X-AI-Key"] = sessionApiKey.trim();
+      }
+
       const res = await fetch(`${API}/api/chat`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ query }),
       });
 
@@ -382,12 +411,47 @@ export default function Home() {
         </section>
 
         <section className="summary-tile">
-          <div className="status-ring">OK</div>
+          <div className="status-ring">{aiEnabled ? "AI" : "FREE"}</div>
           <div>
-            <strong>{readyCount} documents ready</strong>
-            <p>{processingCount ? `${processingCount} still processing` : "All indexed files are ready"}</p>
+            <strong>{aiEnabled ? "AI enabled" : "Free mode"}</strong>
+            <p>{aiEnabled ? `${aiProvider === "anthropic" ? "Anthropic" : "OpenAI"} key active until refresh` : "Keyword search with citations"}</p>
           </div>
           <div className="summary-bar"><span style={{ width: docs.length ? `${Math.max(18, (readyCount / docs.length) * 100)}%` : "0%" }} /></div>
+        </section>
+
+        <section className="ai-settings">
+          <div className="section-head">
+            <p>AI Settings</p>
+            <span className={`mode-pill ${aiEnabled ? "enabled" : ""}`}>{aiEnabled ? "AI enabled" : "Free mode"}</span>
+          </div>
+          <div className="provider-toggle" aria-label="AI provider">
+            <button
+              className={aiProvider === "anthropic" ? "active" : ""}
+              onClick={() => setAiProvider("anthropic")}
+              type="button"
+            >
+              Anthropic
+            </button>
+            <button
+              className={aiProvider === "openai" ? "active" : ""}
+              onClick={() => setAiProvider("openai")}
+              type="button"
+            >
+              OpenAI
+            </button>
+          </div>
+          <input
+            className="api-key-input"
+            type="password"
+            value={apiKeyDraft}
+            onChange={event => setApiKeyDraft(event.target.value)}
+            placeholder={aiEnabled ? "Session key is active" : "Paste API key for AI answers"}
+            autoComplete="off"
+          />
+          <div className="ai-actions">
+            <button className="mini-btn" onClick={saveAiKey} type="button">Save session key</button>
+            <button className="mini-btn ghost" onClick={clearAiKey} type="button" disabled={!aiEnabled && !apiKeyDraft}>Clear</button>
+          </div>
         </section>
 
         <section className="document-section">
