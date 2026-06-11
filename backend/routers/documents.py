@@ -37,9 +37,10 @@ async def _run_ingestion(file_path: str, document_id: str) -> None:
     try:
         chunk_count = await ingest_file(file_path, document_id)
     except Exception as exc:
-        logger.error(f"[{document_id}] Ingestion failed: {exc}")
+        message = _friendly_ingestion_error(exc)
+        logger.error(f"[{document_id}] Ingestion failed: {message}")
         async with AsyncSessionLocal() as db:
-            await crud.update_document_status(db, document_id, "failed", error_message=str(exc))
+            await crud.update_document_status(db, document_id, "failed", error_message=message)
         return
 
     # ── Mark done (session closes immediately after) ──────────────────────────
@@ -190,3 +191,13 @@ async def delete_document(document_id: str, db: AsyncSession = Depends(get_db)):
 
     await crud.delete_document(db, document_id)
     return {"message": "Document deleted successfully"}
+
+
+def _friendly_ingestion_error(exc: Exception) -> str:
+    message = str(exc)
+    lower = message.lower()
+    if "insufficient_quota" in lower or "exceeded your current quota" in lower or "429" in lower:
+        return "OpenAI embedding quota is exhausted. Add billing/credits to the OpenAI key or use another embedding provider."
+    if "api_key" in lower or "authentication" in lower or "401" in lower:
+        return "OpenAI API key is missing or invalid. Check OPENAI_API_KEY in Render environment variables."
+    return message[:300] if len(message) > 300 else message

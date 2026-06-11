@@ -18,6 +18,7 @@ def get_embed_model() -> BaseEmbedding:
         return OpenAIEmbedding(
             model=settings.embedding_model,
             api_key=settings.openai_api_key,
+            max_retries=1,
         )
 
     if settings.embedding_provider == "ollama":
