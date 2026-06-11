@@ -22,6 +22,8 @@ htmlcov/
 # Local app data
 knowledge.db
 knowledge.db-*
+*.db
+*.db-*
 chroma_db/
 docstore/
 uploads/
@@ -33,12 +35,18 @@ uploads/
 tmp/
 
 # Node / Next.js
+node_modules/
+.next/
+out/
+build/
+.vercel/
 nextjs_app/node_modules/
 nextjs_app/.next/
 nextjs_app/out/
 nextjs_app/build/
 nextjs_app/.vercel/
 nextjs_app/next-env.d.ts
+*.tsbuildinfo
 
 # Package manager noise
 npm-debug.log*
