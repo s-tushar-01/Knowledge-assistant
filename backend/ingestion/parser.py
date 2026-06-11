@@ -8,7 +8,6 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_EXTENSIONS = {
     ".pdf", ".docx", ".doc", ".txt", ".md",
-    ".html", ".htm", ".eml", ".mbox", ".pptx",
 }
 
 
@@ -24,6 +23,13 @@ def parse_document(file_path: str | Path, document_id: str) -> List[Document]:
         raise ValueError(f"Unsupported file extension: {ext}")
 
     logger.info(f"Parsing {file_path.name} ({ext})")
+
+    if ext == ".docx":
+        return _parse_docx(file_path, document_id)
+
+    if ext in {".txt", ".md"}:
+        text = file_path.read_text(encoding="utf-8", errors="ignore").strip()
+        return [_make_doc(text, file_path, document_id, 1, "")] if text else []
 
     try:
         from unstructured.partition.auto import partition
@@ -75,6 +81,55 @@ def parse_document(file_path: str | Path, document_id: str) -> List[Document]:
     logger.info(
         f"Parsed {file_path.name}: {len(documents)} sections, "
         f"{sum(len(d.text) for d in documents)} chars total"
+    )
+    return documents
+
+
+def _parse_docx(file_path: Path, document_id: str) -> List[Document]:
+    try:
+        from docx import Document as DocxDocument
+    except ImportError as exc:
+        raise RuntimeError("DOCX support requires python-docx. Add python-docx to requirements.txt.") from exc
+
+    docx = DocxDocument(str(file_path))
+    documents: List[Document] = []
+    current_section = ""
+    buffer: List[str] = []
+
+    def flush():
+        if buffer:
+            documents.append(_make_doc(
+                "\n".join(buffer).strip(), file_path, document_id, 1, current_section,
+            ))
+            buffer.clear()
+
+    for paragraph in docx.paragraphs:
+        text = paragraph.text.strip()
+        if not text:
+            continue
+
+        style_name = paragraph.style.name.lower() if paragraph.style and paragraph.style.name else ""
+        if style_name.startswith("heading"):
+            flush()
+            current_section = text
+
+        buffer.append(text)
+
+    flush()
+
+    table_text: List[str] = []
+    for table in docx.tables:
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+            if cells:
+                table_text.append(" | ".join(cells))
+
+    if table_text:
+        documents.append(_make_doc("\n".join(table_text), file_path, document_id, 1, "Tables"))
+
+    logger.info(
+        "Parsed %s with python-docx: %d sections, %d chars total",
+        file_path.name, len(documents), sum(len(d.text) for d in documents),
     )
     return documents
 

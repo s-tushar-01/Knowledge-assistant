@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # Thread pool for CPU/IO-bound ingestion work.
 # CLAUDE.md: "Document ingestion is too slow for synchronous HTTP requests."
 # Running inside async def without executor blocks the event loop for 15–45 s per PDF.
-_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="ingest")
+_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ingest")
 
 # Where the BM25 docstore is persisted so retriever.py can load it.
 DOCSTORE_DIR = "./docstore"

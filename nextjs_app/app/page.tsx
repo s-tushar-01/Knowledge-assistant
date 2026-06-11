@@ -237,6 +237,10 @@ export default function Home() {
 
   const sendMessage = async (query: string) => {
     if (!query.trim() || sending) return;
+    if (readyCount === 0) {
+      toast("error", processingCount > 0 ? "Wait until your document finishes indexing." : "Upload a document before asking for insights.");
+      return;
+    }
     const userMsg: Message = { id: uid(), role: "user", content: query };
     const aiMsg: Message = { id: uid(), role: "assistant", content: "", streaming: true };
 
@@ -367,12 +371,12 @@ export default function Home() {
           <div className="upload-mark" aria-hidden="true">UP</div>
           <h2>{uploading ? "Uploading files" : "Upload documents"}</h2>
           <p>Drag and drop files here or click to browse.</p>
-          <span>PDF, DOCX, PPTX, TXT, HTML, EML, MBOX</span>
+          <span>PDF, DOCX, DOC, TXT, MD</span>
           <input
             ref={fileInputRef}
             type="file"
             multiple
-            accept=".pdf,.docx,.doc,.pptx,.md,.txt,.html,.htm,.eml,.mbox"
+            accept=".pdf,.docx,.doc,.txt,.md"
             onChange={event => handleFiles(event.target.files)}
           />
         </section>
@@ -449,12 +453,14 @@ export default function Home() {
             <div className="welcome-state">
               <div className="assistant-mark">AI</div>
               <h3>Ask anything about your documents</h3>
-              <p>Upload files, then ask for summaries, decisions, risks, dates, or exact evidence from the sources.</p>
-              <div className="suggestion-row">
-                {suggestions.map(suggestion => (
-                  <button key={suggestion} onClick={() => void sendMessage(suggestion)}>{suggestion}</button>
-                ))}
-              </div>
+              <p>{processingCount > 0 ? "Your document is being indexed. Questions will unlock when it is ready." : "Upload files to ask for summaries, decisions, risks, dates, or exact evidence from the sources."}</p>
+              {readyCount > 0 && (
+                <div className="suggestion-row">
+                  {suggestions.map(suggestion => (
+                    <button key={suggestion} onClick={() => void sendMessage(suggestion)}>{suggestion}</button>
+                  ))}
+                </div>
+              )}
             </div>
           ) : messages.map(msg => (
             <article key={msg.id} className={`message ${msg.role}`}>
@@ -500,22 +506,24 @@ export default function Home() {
         </section>
 
         <section className="composer-area">
-          <div className="quick-actions">
-            {suggestions.slice(1).map(suggestion => (
-              <button key={suggestion} onClick={() => void sendMessage(suggestion)}>{suggestion}</button>
-            ))}
-          </div>
+          {readyCount > 0 && (
+            <div className="quick-actions">
+              {suggestions.slice(1).map(suggestion => (
+                <button key={suggestion} onClick={() => void sendMessage(suggestion)}>{suggestion}</button>
+              ))}
+            </div>
+          )}
           <div className="composer">
             <textarea
               ref={textareaRef}
               value={input}
               onChange={autoResize}
               onKeyDown={handleKeyDown}
-              placeholder="Ask a follow-up question..."
+              placeholder={readyCount > 0 ? "Ask a follow-up question..." : "Upload and index a document first..."}
               rows={1}
-              disabled={sending}
+              disabled={sending || readyCount === 0}
             />
-            <button className="send-btn" onClick={() => void sendMessage(input)} disabled={sending || !input.trim()}>
+            <button className="send-btn" onClick={() => void sendMessage(input)} disabled={sending || !input.trim() || readyCount === 0}>
               Send
             </button>
           </div>
